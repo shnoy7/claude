@@ -1,0 +1,50 @@
+# Save this in your repo as:  .github/workflows/screenshots.yml
+name: Hourly screenshots
+
+on:
+  schedule:
+    - cron: "0 * * * *"     # minute 0 of every hour (GitHub cron is always UTC)
+  workflow_dispatch:         # adds a "Run workflow" button on the Actions tab for testing
+
+permissions:
+  contents: write            # lets the job commit the screenshots back to the repo
+
+concurrency:
+  group: hourly-screenshots  # never run two at once (avoids push conflicts)
+  cancel-in-progress: false
+
+jobs:
+  screenshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TZ: America/New_York   # time zone used in the folder/file names; change if you like
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install Playwright and Chromium
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium
+
+      - name: Take screenshots
+        run: python screenshot.py
+
+      - name: Commit screenshots
+        if: ${{ !cancelled() }}
+        run: |
+          mkdir -p screenshots
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add screenshots
+          if git diff --cached --quiet; then
+            echo "Nothing to commit."
+          else
+            git commit -m "Screenshots $(date +'%Y-%m-%d %H:%M %Z')"
+            git pull --rebase
+            git push
+          fi
